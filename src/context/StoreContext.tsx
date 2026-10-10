@@ -108,6 +108,7 @@ interface StoreContextValue {
   setBranding: (patch: Partial<SiteBranding>) => void
   resetBranding: () => void
   migrateLocalToCloudIfEmpty: () => Promise<void>
+  publishSiteToCloud: () => Promise<boolean>
   storageError: string | null
   clearStorageError: () => void
 }
@@ -144,9 +145,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!usesCloudStore) return
     void loadSiteFromCloud()
-      .then((data) => {
+      .then(async (data) => {
         if (data) applySnapshot(data)
-        clearLegacyLocalStorage()
+        const row = await fetchSiteContentRaw()
+        if (!isCloudContentEmpty(row)) {
+          clearLegacyLocalStorage()
+        }
       })
       .finally(() => setStoreReady(true))
   }, [usesCloudStore, applySnapshot])
@@ -182,6 +186,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [usesCloudStore, applySnapshot],
   )
+
+  const publishSiteToCloud = useCallback(async (): Promise<boolean> => {
+    if (!usesCloudStore) {
+      setStorageError('Supabase is not configured on this build.')
+      return false
+    }
+    const snapshot: SiteContentSnapshot = { products, categories, branding }
+    try {
+      await saveSiteContent(snapshot)
+      applySnapshot(snapshot)
+      clearLegacyLocalStorage()
+      setStorageError(null)
+      return true
+    } catch (e) {
+      setStorageError(e instanceof Error ? e.message : 'Could not publish to live site.')
+      return false
+    }
+  }, [usesCloudStore, products, categories, branding, applySnapshot])
 
   const migrateLocalToCloudIfEmpty = useCallback(async () => {
     if (!usesCloudStore) return
@@ -376,6 +398,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBranding,
       resetBranding,
       migrateLocalToCloudIfEmpty,
+      publishSiteToCloud,
       storageError,
       clearStorageError,
     }),
@@ -398,6 +421,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setBranding,
       resetBranding,
       migrateLocalToCloudIfEmpty,
+      publishSiteToCloud,
       storageError,
       clearStorageError,
     ],
