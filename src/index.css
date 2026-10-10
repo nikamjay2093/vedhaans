@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --color-grain-50: #faf6ef;
+  --color-grain-100: #f0e6d4;
+  --color-grain-200: #e2d0b0;
+  --color-grain-300: #c9a96e;
+  --color-grain-400: #a67c3d;
+  --color-grain-500: #8b5e2a;
+  --color-grain-600: #6d4520;
+  --color-grain-700: #4a2f16;
+  --color-grain-800: #2d1c0e;
+  --color-grain-900: #1a1008;
+  --color-leaf-400: #5a8f4a;
+  --color-leaf-500: #3d6b32;
+  --color-leaf-600: #2d5025;
+  --color-chili-500: #c23b22;
+  --color-brand-navy: #1a2d4d;
+  --color-brand-orange: #d4642a;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-white text-neutral-900 antialiased font-sans;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* Thin fade under standard-height navbar (no extra header height) */
+.navbar-bottom-fade {
+  height: 1rem;
+  margin-top: -1px;
+  background: linear-gradient(
+    to bottom,
+    #ffffff 0%,
+    rgba(255, 255, 255, 0.72) 45%,
+    rgba(255, 255, 255, 0.28) 75%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* Hero banner full background — dissolve into white / next section at bottom */
+.hero-section-bg-fade {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 48%,
+    rgba(0, 0, 0, 0.65) 68%,
+    rgba(0, 0, 0, 0.25) 84%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 48%,
+    rgba(0, 0, 0, 0.65) 68%,
+    rgba(0, 0, 0, 0.25) 84%,
+    transparent 100%
+  );
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
