@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { BrandLogo } from '../components/BrandLogo'
-import { tryAdminLogin } from '../utils/adminAuth'
+import { tryAdminLogin, usesCloudAdminAuth } from '../utils/adminAuth'
 
 interface AdminLoginPageProps {
   onSuccess: () => void
@@ -11,15 +11,20 @@ export function AdminLoginPage({ onSuccess }: AdminLoginPageProps) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const cloudAuth = usesCloudAdminAuth()
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (tryAdminLogin(username, password)) {
+    setLoading(true)
+    const ok = await tryAdminLogin(username, password)
+    setLoading(false)
+    if (ok) {
       onSuccess()
       return
     }
-    setError('Invalid username or password.')
+    setError(cloudAuth ? 'Invalid email or password.' : 'Invalid username or password.')
   }
 
   return (
@@ -33,14 +38,17 @@ export function AdminLoginPage({ onSuccess }: AdminLoginPageProps) {
         </Link>
         <div className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm">
           <h1 className="font-display text-2xl font-semibold text-neutral-900">Sign in</h1>
-          <p className="mt-1 text-sm text-neutral-600">Vedhaans admin — staff only.</p>
+          <p className="mt-1 text-sm text-neutral-600">
+            Vedhaans admin — staff only.
+            {cloudAuth && ' Sign in with your Supabase admin email.'}
+          </p>
           <form onSubmit={submit} className="mt-8 space-y-5">
             <label className="block text-sm">
-              <span className="font-medium text-neutral-700">Username</span>
+              <span className="font-medium text-neutral-700">{cloudAuth ? 'Email' : 'Username'}</span>
               <input
-                type="text"
+                type={cloudAuth ? 'email' : 'text'}
                 name="username"
-                autoComplete="username"
+                autoComplete={cloudAuth ? 'email' : 'username'}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-neutral-900 outline-none focus:border-neutral-400"
@@ -66,9 +74,10 @@ export function AdminLoginPage({ onSuccess }: AdminLoginPageProps) {
             )}
             <button
               type="submit"
-              className="w-full rounded-lg bg-neutral-900 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800"
+              disabled={loading}
+              className="w-full rounded-lg bg-neutral-900 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-60"
             >
-              Continue
+              {loading ? 'Signing in…' : 'Continue'}
             </button>
           </form>
         </div>

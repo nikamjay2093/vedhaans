@@ -8,22 +8,32 @@ const fieldClass =
 export function GeneralEnquiry() {
   const { submitEnquiry } = useStore()
   const [done, setDone] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
-    submitEnquiry({
-      productId: 'general',
-      productName: 'General trade enquiry',
-      name: String(fd.get('name') ?? ''),
-      email: String(fd.get('email') ?? ''),
-      phone: String(fd.get('phone') ?? ''),
-      company: String(fd.get('company') ?? ''),
-      quantity: String(fd.get('quantity') ?? ''),
-      message: String(fd.get('message') ?? ''),
-    })
-    setDone(true)
-    e.currentTarget.reset()
+    setError(null)
+    setSubmitting(true)
+    try {
+      await submitEnquiry({
+        productId: 'general',
+        productName: 'General trade enquiry',
+        name: String(fd.get('name') ?? ''),
+        email: String(fd.get('email') ?? ''),
+        phone: String(fd.get('phone') ?? ''),
+        company: String(fd.get('company') ?? ''),
+        quantity: String(fd.get('quantity') ?? ''),
+        message: String(fd.get('message') ?? ''),
+      })
+      setDone(true)
+      e.currentTarget.reset()
+    } catch {
+      setError('Could not send enquiry. Please try again or call us.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -53,6 +63,7 @@ export function GeneralEnquiry() {
           {done && (
             <p className="text-sm text-neutral-700">Enquiry received — thank you!</p>
           )}
+          {error && <p className="text-sm text-red-700" role="alert">{error}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <input name="name" required placeholder="Name *" className={fieldClass} />
             <input name="phone" required placeholder="Phone *" className={fieldClass} />
@@ -68,9 +79,10 @@ export function GeneralEnquiry() {
           />
           <button
             type="submit"
-            className="pt-2 text-left text-sm font-semibold text-neutral-900 underline-offset-4 hover:underline"
+            disabled={submitting}
+            className="pt-2 text-left text-sm font-semibold text-neutral-900 underline-offset-4 hover:underline disabled:opacity-60"
           >
-            Send to Vedhaans
+            {submitting ? 'Sending…' : 'Send to Vedhaans'}
           </button>
         </motion.form>
       </div>

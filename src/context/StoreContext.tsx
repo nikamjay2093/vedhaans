@@ -10,6 +10,8 @@ import { DEFAULT_BRANDING } from '../data/defaultBranding'
 import { img, isBrokenImageUrl } from '../data/images'
 import { CATEGORIES, INITIAL_PRODUCTS } from '../data/seed'
 import { uniqueCategoryId } from '../utils/categorySlug'
+import { isSupabaseConfigured } from '../lib/supabase'
+import { insertCloudEnquiry } from '../services/enquiryCloud'
 import { setLocalStorage, StorageQuotaError } from '../utils/storage'
 import { DEFAULT_HERO_SLIDE_BG } from '../data/heroSlideDefaults'
 import type {
@@ -265,7 +267,7 @@ interface StoreContextValue {
   updateProduct: (id: string, patch: Partial<Product>) => void
   saveProduct: (product: Product) => void
   deleteProduct: (id: string) => void
-  submitEnquiry: (e: Omit<Enquiry, 'id' | 'createdAt'>) => void
+  submitEnquiry: (e: Omit<Enquiry, 'id' | 'createdAt'>) => Promise<void>
   setBranding: (patch: Partial<SiteBranding>) => void
   resetBranding: () => void
   storageError: string | null
@@ -419,7 +421,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const submitEnquiry = useCallback(
-    (e: Omit<Enquiry, 'id' | 'createdAt'>) => {
+    async (e: Omit<Enquiry, 'id' | 'createdAt'>) => {
+      if (isSupabaseConfigured()) {
+        await insertCloudEnquiry(e)
+        return
+      }
       const entry: Enquiry = {
         ...e,
         id: `enq-${Date.now()}`,

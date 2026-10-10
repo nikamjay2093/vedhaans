@@ -18,6 +18,8 @@ import { ContactPanel } from '../components/admin/ContactPanel'
 import { ProductForm, type ProductFormValues } from '../components/admin/ProductForm'
 import { SafeImage } from '../components/SafeImage'
 import { emptyProductForm, useStore } from '../context/StoreContext'
+import { useCloudEnquiries } from '../hooks/useCloudEnquiries'
+import { isSupabaseConfigured } from '../lib/supabase'
 import type { Product } from '../types'
 
 type AdminTab = 'inventory' | 'categories' | 'branding' | 'contact' | 'enquiries'
@@ -37,6 +39,13 @@ export function AdminPage({ onLogout }: AdminPageProps) {
     storageError,
     clearStorageError,
   } = useStore()
+  const cloudSync = isSupabaseConfigured()
+  const {
+    enquiries: cloudEnquiries,
+    loading: cloudEnquiriesLoading,
+    error: cloudEnquiriesError,
+  } = useCloudEnquiries(cloudSync)
+  const enquiryList = cloudSync ? cloudEnquiries : enquiries
   const [tab, setTab] = useState<AdminTab>('inventory')
   const [filter, setFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
@@ -293,11 +302,21 @@ export function AdminPage({ onLogout }: AdminPageProps) {
         {tab === 'enquiries' && (
           <section>
             <h2 className="font-display text-2xl font-semibold text-neutral-900">Enquiries</h2>
-            {enquiries.length === 0 ? (
+            {cloudSync && (
+              <p className="mt-1 text-sm text-neutral-600">
+                Live from all visitors — new submissions appear here automatically.
+              </p>
+            )}
+            {cloudEnquiriesError && (
+              <p className="mt-2 text-sm text-red-700" role="alert">{cloudEnquiriesError}</p>
+            )}
+            {cloudEnquiriesLoading ? (
+              <p className="mt-2 text-sm text-neutral-600">Loading enquiries…</p>
+            ) : enquiryList.length === 0 ? (
               <p className="mt-2 text-sm text-neutral-600">No enquiries yet — submit from the storefront.</p>
             ) : (
               <ul className="mt-8 divide-y divide-neutral-100">
-                {enquiries.map((enq) => (
+                {enquiryList.map((enq) => (
                   <li key={enq.id} className="py-5 text-sm first:pt-0">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <span className="font-semibold text-neutral-900">{enq.productName}</span>

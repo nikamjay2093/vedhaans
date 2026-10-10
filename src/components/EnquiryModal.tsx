@@ -16,26 +16,36 @@ interface EnquiryModalProps {
 export function EnquiryModal({ product, open, onClose }: EnquiryModalProps) {
   const { submitEnquiry } = useStore()
   const [sent, setSent] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!product) return
     const fd = new FormData(e.currentTarget)
-    submitEnquiry({
-      productId: product.id,
-      productName: product.name,
-      name: String(fd.get('name') ?? ''),
-      email: String(fd.get('email') ?? ''),
-      phone: String(fd.get('phone') ?? ''),
-      company: String(fd.get('company') ?? ''),
-      quantity: String(fd.get('quantity') ?? ''),
-      message: String(fd.get('message') ?? ''),
-    })
-    setSent(true)
-    setTimeout(() => {
-      setSent(false)
-      onClose()
-    }, 2200)
+    setSubmitError(null)
+    setSubmitting(true)
+    try {
+      await submitEnquiry({
+        productId: product.id,
+        productName: product.name,
+        name: String(fd.get('name') ?? ''),
+        email: String(fd.get('email') ?? ''),
+        phone: String(fd.get('phone') ?? ''),
+        company: String(fd.get('company') ?? ''),
+        quantity: String(fd.get('quantity') ?? ''),
+        message: String(fd.get('message') ?? ''),
+      })
+      setSent(true)
+      setTimeout(() => {
+        setSent(false)
+        onClose()
+      }, 2200)
+    } catch {
+      setSubmitError('Could not send enquiry. Please try again or call us.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -108,11 +118,15 @@ export function EnquiryModal({ product, open, onClose }: EnquiryModalProps) {
                     <span className="text-neutral-600">Message</span>
                     <textarea name="message" rows={3} className={inputClass} />
                   </label>
+                  {submitError && (
+                    <p className="text-sm text-red-700" role="alert">{submitError}</p>
+                  )}
                   <button
                     type="submit"
-                    className="w-full py-3 text-left text-sm font-semibold text-neutral-900 underline-offset-4 hover:underline"
+                    disabled={submitting}
+                    className="w-full py-3 text-left text-sm font-semibold text-neutral-900 underline-offset-4 hover:underline disabled:opacity-60"
                   >
-                    Submit enquiry
+                    {submitting ? 'Sending…' : 'Submit enquiry'}
                   </button>
                 </form>
               </>
