@@ -131,12 +131,28 @@ export function AdminPage({ onLogout }: AdminPageProps) {
             )}
           </div>
         </div>
-        {usesCloudStore && (
-          <p className="mx-auto max-w-6xl border-t border-neutral-100 bg-amber-50/80 px-4 py-2 text-center text-xs text-amber-950 sm:px-6 sm:text-sm">
-            Saves go to Supabase for all visitors. Use <strong>Publish to live site</strong> (top
-            right) after changing banners or products.
-          </p>
-        )}
+        <p
+          className={`mx-auto max-w-6xl border-t px-4 py-2 text-center text-xs sm:px-6 sm:text-sm ${
+            usesCloudStore
+              ? 'border-neutral-100 bg-emerald-50/90 text-emerald-950'
+              : 'border-amber-200 bg-amber-50 text-amber-950'
+          }`}
+        >
+          {usesCloudStore ? (
+            <>
+              <strong>Supabase connected.</strong> After editing banners or products, click{' '}
+              <strong>Publish to live site</strong> (top right).
+            </>
+          ) : (
+            <>
+              <strong>Supabase not in this build.</strong> Cloudflare → Settings → Variables → add{' '}
+              <code className="text-[11px]">VITE_SUPABASE_URL</code> and{' '}
+              <code className="text-[11px]">VITE_SUPABASE_ANON_KEY</code> → Deployments →{' '}
+              <strong>Retry deployment</strong>. If Banners still says &quot;saved in this
+              browser&quot;, hard-refresh — you are on an old version.
+            </>
+          )}
+        </p>
         <nav className="mx-auto flex max-w-6xl gap-6 px-4 pb-4 sm:px-6">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
