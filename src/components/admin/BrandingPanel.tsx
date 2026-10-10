@@ -1,5 +1,4 @@
-import { CloudUpload, Plus, RotateCcw, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { createAboutPillar } from '../../data/aboutDefaults'
 import { createHeroSlide } from '../../data/heroSlideDefaults'
 import {
@@ -32,15 +31,7 @@ const fieldClass =
   'mt-1 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-neutral-900 outline-none focus:border-neutral-400'
 
 export function BrandingPanel() {
-  const { branding, setBranding, resetBranding, publishSiteToCloud, usesCloudStore } = useStore()
-  const [publishState, setPublishState] = useState<'idle' | 'saving' | 'ok'>('idle')
-
-  const onPublish = async () => {
-    setPublishState('saving')
-    const ok = await publishSiteToCloud()
-    setPublishState(ok ? 'ok' : 'idle')
-    if (ok) setTimeout(() => setPublishState('idle'), 4000)
-  }
+  const { branding, setBranding, resetBranding, usesCloudStore } = useStore()
 
   const updateSlide = (id: string, patch: Partial<HeroSlide>) => {
     setBranding({
@@ -108,37 +99,27 @@ export function BrandingPanel() {
           Homepage banners, About Us block, Kolhapur section, category headers, and embedded videos — saved to Supabase when configured (same for all visitors).
           Use raw commodity photos only (no prepared dishes).
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          {usesCloudStore && (
-            <button
-              type="button"
-              onClick={() => void onPublish()}
-              disabled={publishState === 'saving'}
-              className="inline-flex items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-60"
-            >
-              <CloudUpload className="h-4 w-4" />
-              {publishState === 'saving'
-                ? 'Publishing…'
-                : publishState === 'ok'
-                  ? 'Published ✓'
-                  : 'Publish to live site'}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={resetBranding}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-700 hover:text-neutral-900"
-          >
-            <RotateCcw className="h-4 w-4" />
-            Reset to defaults
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={resetBranding}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-neutral-700 hover:text-neutral-900"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Reset to defaults
+        </button>
       </div>
-      {usesCloudStore && (
+      {usesCloudStore ? (
         <p className="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          Phones and other browsers load banners from Supabase. If{' '}
-          <code className="text-xs">site_content.branding</code> is empty, paste your public image URLs below, then click{' '}
-          <strong>Publish to live site</strong>.
+          Paste public image URLs on each slide (URL tab — not beside every field as a separate
+          publish). When done, use <strong>Publish to live site</strong> in the admin header (top
+          right, all tabs).
+        </p>
+      ) : (
+        <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-700">
+          <strong>Publish to live site</strong> is hidden because Supabase is not configured in
+          this build. Add <code className="text-xs">VITE_SUPABASE_URL</code> and{' '}
+          <code className="text-xs">VITE_SUPABASE_ANON_KEY</code> in Cloudflare Variables, then
+          redeploy.
         </p>
       )}
 

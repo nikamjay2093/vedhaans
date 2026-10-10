@@ -12,6 +12,7 @@ import {
   Inbox,
 } from 'lucide-react'
 import { BrandLogo } from '../components/BrandLogo'
+import { PublishLiveButton } from '../components/admin/PublishLiveButton'
 import { BrandingPanel } from '../components/admin/BrandingPanel'
 import { CategoriesPanel } from '../components/admin/CategoriesPanel'
 import { ContactPanel } from '../components/admin/ContactPanel'
@@ -38,6 +39,7 @@ export function AdminPage({ onLogout }: AdminPageProps) {
     deleteProduct,
     storageError,
     clearStorageError,
+    usesCloudStore,
   } = useStore()
   const cloudSync = isSupabaseConfigured()
   const {
@@ -110,7 +112,8 @@ export function AdminPage({ onLogout }: AdminPageProps) {
             <span className="hidden text-neutral-300 sm:inline">|</span>
             <h1 className="font-display text-xl font-semibold text-neutral-900 sm:text-2xl">Admin</h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-4">
+            <PublishLiveButton />
             <Link
               to="/"
               className="text-sm font-medium text-neutral-600 transition hover:text-neutral-900"
@@ -128,6 +131,12 @@ export function AdminPage({ onLogout }: AdminPageProps) {
             )}
           </div>
         </div>
+        {usesCloudStore && (
+          <p className="mx-auto max-w-6xl border-t border-neutral-100 bg-amber-50/80 px-4 py-2 text-center text-xs text-amber-950 sm:px-6 sm:text-sm">
+            Saves go to Supabase for all visitors. Use <strong>Publish to live site</strong> (top
+            right) after changing banners or products.
+          </p>
+        )}
         <nav className="mx-auto flex max-w-6xl gap-6 px-4 pb-4 sm:px-6">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
