@@ -96,7 +96,7 @@ export function BrandingPanel() {
     <div className="space-y-16">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-sm text-neutral-600">
-          Homepage banners, About Us block, Kolhapur section, category headers, and embedded videos — saved in this browser.
+          Homepage banners, About Us block, Kolhapur section, category headers, and embedded videos — saved to Supabase when configured (same for all visitors).
           Use raw commodity photos only (no prepared dishes).
         </p>
         <button

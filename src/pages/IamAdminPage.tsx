@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import { useStore } from '../context/StoreContext'
 import { AdminLoginPage } from './AdminLoginPage'
 import { AdminPage } from './AdminPage'
 import { clearAdminSession, hydrateAdminSession, isAdminAuthenticated } from '../utils/adminAuth'
 
 export function IamAdminPage() {
+  const { migrateLocalToCloudIfEmpty, usesCloudStore } = useStore()
   const [authed, setAuthed] = useState(() => isAdminAuthenticated())
   const [checking, setChecking] = useState(true)
 
@@ -26,8 +28,15 @@ export function IamAdminPage() {
     )
   }
 
+  const onAdminLogin = () => {
+    setAuthed(true)
+    if (usesCloudStore) {
+      void migrateLocalToCloudIfEmpty()
+    }
+  }
+
   if (!authed) {
-    return <AdminLoginPage onSuccess={() => setAuthed(true)} />
+    return <AdminLoginPage onSuccess={onAdminLogin} />
   }
 
   return <AdminPage onLogout={logout} />

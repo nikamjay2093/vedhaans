@@ -2,16 +2,19 @@
 
 Visitors submit enquiries from the live site; you see them in **Admin → Enquiries** from any browser, with new rows appearing in near real time.
 
-**Catalog, banners, and products** still save in the browser (`localStorage`) until you add a database for those too.
+When Supabase env vars are set, **catalog, banners, and contact** load from `site_content` (not the browser). Admin saves go to Supabase; all devices see the same site.
 
 ## 1. Create a Supabase project
 
 1. [supabase.com](https://supabase.com) → New project (free tier is enough).
 2. **Project Settings → API** → copy **Project URL** and **anon public** key.
 
-## 2. Create the table
+## 2. Create database tables
 
-**SQL Editor** → paste and run `supabase/enquiries.sql` from this repo.
+**SQL Editor** → run both scripts from this repo:
+
+1. `supabase/enquiries.sql`
+2. `supabase/site_content.sql` (products, categories, banners — shared for all visitors)
 
 If `alter publication` errors because the table is already in realtime, ignore it and enable **Database → Replication** for `enquiries` if needed.
 

@@ -2,96 +2,84 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
-import { DEFAULT_BRANDING } from '../data/defaultBranding'
-import { img, isBrokenImageUrl } from '../data/images'
-import { CATEGORIES, INITIAL_PRODUCTS } from '../data/seed'
+import { img } from '../data/images'
 import { uniqueCategoryId } from '../utils/categorySlug'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { insertCloudEnquiry } from '../services/enquiryCloud'
+import {
+  fetchSiteContentRaw,
+  isCloudContentEmpty,
+  readLegacyLocalSnapshot,
+  saveSiteContent,
+  clearLegacyLocalStorage,
+  type SiteContentSnapshot,
+} from '../services/siteContentCloud'
 import { setLocalStorage, StorageQuotaError } from '../utils/storage'
-import { DEFAULT_HERO_SLIDE_BG } from '../data/heroSlideDefaults'
-import type {
-  CategoryMeta,
-  Enquiry,
-  HeroBackgroundMode,
-  HeroSlide,
-  AboutPillarIcon,
-  AboutSection,
-  KolhapurContent,
-  KolhapurMediaSlide,
-  Product,
-  SiteBranding,
-  SiteContact,
-} from '../types'
-
-type StoredBranding = SiteBranding & {
-  heroBackgroundMode?: HeroBackgroundMode
-  heroBackgroundColor?: string
-  heroBackgroundImage?: string
-  kolhapurImage?: string
-}
-
-const seedById = new Map(INITIAL_PRODUCTS.map((p) => [p.id, p]))
+import { healBranding } from './brandingHeal'
+import {
+  defaultBranding,
+  defaultCategories,
+  defaultProducts,
+  mergeSiteFromCloud,
+} from './siteDataHelpers'
+import { loadSiteFromCloud, useSiteContentRealtime } from '../hooks/useSiteContentSync'
+import type { CategoryMeta, Enquiry, Product, SiteBranding } from '../types'
 
 const STORAGE_PRODUCTS = 'vedhaans-products'
 const STORAGE_ENQUIRIES = 'vedhaans-enquiries'
 const STORAGE_BRANDING = 'vedhaans-branding'
 const STORAGE_CATEGORIES = 'vedhaans-categories'
 
-const DEFAULT_CATEGORIES: CategoryMeta[] = CATEGORIES.map((c) => ({ ...c }))
-
-function normalizeCategory(c: CategoryMeta, fallback: CategoryMeta): CategoryMeta {
-  return {
-    ...fallback,
-    ...c,
-    id: String(c.id || fallback.id),
-    label: (c.label ?? fallback.label).trim() || fallback.label,
-    tagline: c.tagline ?? fallback.tagline,
-    heroImage: isBrokenImageUrl(c.heroImage) ? fallback.heroImage : c.heroImage,
-  }
-}
-
-function loadCategories(): CategoryMeta[] {
+function loadCategoriesLocal(): CategoryMeta[] {
   try {
     const raw = localStorage.getItem(STORAGE_CATEGORIES)
     if (raw) {
       const parsed = JSON.parse(raw) as CategoryMeta[]
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((c, i) =>
-          normalizeCategory(c, DEFAULT_CATEGORIES[i] ?? DEFAULT_CATEGORIES[0]),
-        )
+        return mergeSiteFromCloud({ products: null, categories: parsed, branding: null })
+          .categories
       }
     }
   } catch {
     /* ignore */
   }
-  return DEFAULT_CATEGORIES.map((c) => ({ ...c }))
+  return defaultCategories()
 }
 
-function healProduct(p: Product): Product {
-  if (!isBrokenImageUrl(p.image)) return p
-  const seed = seedById.get(p.id)
-  if (seed) return { ...p, image: seed.image }
-  return p
-}
-
-function loadProducts(): Product[] {
+function loadProductsLocal(): Product[] {
   try {
     const raw = localStorage.getItem(STORAGE_PRODUCTS)
     if (raw) {
-      return (JSON.parse(raw) as Product[]).map(healProduct)
+      return mergeSiteFromCloud({
+        products: JSON.parse(raw) as Product[],
+        categories: null,
+        branding: null,
+      }).products
     }
   } catch {
     /* ignore */
   }
-  return INITIAL_PRODUCTS
+  return defaultProducts()
 }
 
-function loadEnquiries(): Enquiry[] {
+function loadBrandingLocal(cats: CategoryMeta[]): SiteBranding {
+  try {
+    const raw = localStorage.getItem(STORAGE_BRANDING)
+    if (raw) {
+      return healBranding(JSON.parse(raw) as SiteBranding, cats)
+    }
+  } catch {
+    /* ignore */
+  }
+  return defaultBranding(cats)
+}
+
+function loadEnquiriesLocal(): Enquiry[] {
   try {
     const raw = localStorage.getItem(STORAGE_ENQUIRIES)
     if (raw) return JSON.parse(raw) as Enquiry[]
@@ -101,164 +89,13 @@ function loadEnquiries(): Enquiry[] {
   return []
 }
 
-function healBranding(b: SiteBranding, cats: CategoryMeta[]): SiteBranding {
-  const d = DEFAULT_BRANDING
-  const heal = (url: string, fallback: string) =>
-    isBrokenImageUrl(url) ? fallback : url
-
-  const heroTextColor =
-    typeof b.heroTextColor === 'string' && /^#[0-9A-Fa-f]{6}$/.test(b.heroTextColor)
-      ? b.heroTextColor
-      : d.heroTextColor
-
-  const stored = b as StoredBranding
-  const legacyBg: Pick<HeroSlide, 'backgroundMode' | 'backgroundColor' | 'backgroundImage'> = {
-    backgroundMode:
-      stored.heroBackgroundMode === 'plain' ||
-      stored.heroBackgroundMode === 'color' ||
-      stored.heroBackgroundMode === 'image'
-        ? stored.heroBackgroundMode
-        : DEFAULT_HERO_SLIDE_BG.backgroundMode,
-    backgroundColor:
-      typeof stored.heroBackgroundColor === 'string' &&
-      /^#[0-9A-Fa-f]{6}$/.test(stored.heroBackgroundColor)
-        ? stored.heroBackgroundColor
-        : DEFAULT_HERO_SLIDE_BG.backgroundColor,
-    backgroundImage: stored.heroBackgroundImage ?? DEFAULT_HERO_SLIDE_BG.backgroundImage,
-  }
-
-  const normalizeSlide = (s: HeroSlide, i: number): HeroSlide => {
-    const fb = d.heroSlides[i] ?? d.heroSlides[0]
-    const mode = s.backgroundMode ?? legacyBg.backgroundMode
-    const backgroundMode: HeroBackgroundMode =
-      mode === 'plain' || mode === 'color' || mode === 'image' ? mode : 'plain'
-    const backgroundColor =
-      typeof s.backgroundColor === 'string' && /^#[0-9A-Fa-f]{6}$/.test(s.backgroundColor)
-        ? s.backgroundColor
-        : s.backgroundColor === undefined
-          ? legacyBg.backgroundColor
-          : fb.backgroundColor
-    const backgroundImage = heal(
-      s.backgroundImage ?? legacyBg.backgroundImage,
-      fb.backgroundImage,
-    )
-
-    return {
-      ...fb,
-      ...s,
-      image: heal(s.image, fb.image),
-      backgroundMode,
-      backgroundColor,
-      backgroundImage,
-    }
-  }
-
-  const slides = (b.heroSlides?.length ? b.heroSlides : d.heroSlides).map(normalizeSlide)
-
-  const legacyKolhapurImage = stored.kolhapurImage
-
-  const normalizeKolhapurMedia = (s: KolhapurMediaSlide, i: number): KolhapurMediaSlide => {
-    const fb = d.kolhapur.mediaSlides[i] ?? d.kolhapur.mediaSlides[0]
-    const type = s.type === 'video' || s.type === 'image' ? s.type : 'image'
-    return {
-      ...fb,
-      ...s,
-      type,
-      caption: s.caption ?? '',
-      src: type === 'image' ? heal(s.src ?? '', fb.src) : (s.src ?? fb.src),
-    }
-  }
-
-  const healKolhapur = (): KolhapurContent => {
-    if (b.kolhapur?.mediaSlides?.length) {
-      const k = b.kolhapur
-      return {
-        eyebrow: k.eyebrow?.trim() || d.kolhapur.eyebrow,
-        title: k.title?.trim() || d.kolhapur.title,
-        intro: k.intro?.trim() || d.kolhapur.intro,
-        bullets:
-          k.bullets?.length && k.bullets.some((line) => line.trim())
-            ? k.bullets
-            : d.kolhapur.bullets,
-        mediaSlides: k.mediaSlides.map(normalizeKolhapurMedia),
-      }
-    }
-
-    const firstSrc = legacyKolhapurImage
-      ? heal(legacyKolhapurImage, d.kolhapur.mediaSlides[0].src)
-      : d.kolhapur.mediaSlides[0].src
-
-    return {
-      ...d.kolhapur,
-      mediaSlides: [{ ...d.kolhapur.mediaSlides[0], src: firstSrc }],
-    }
-  }
-
-  const contact: SiteContact = {
-    address: b.contact?.address?.trim() || d.contact.address,
-    phone: b.contact?.phone?.trim() || d.contact.phone,
-    email: b.contact?.email?.trim() || d.contact.email,
-    footerAbout: b.contact?.footerAbout?.trim() || d.contact.footerAbout,
-    footerNote: b.contact?.footerNote?.trim() || d.contact.footerNote,
-  }
-
-  const aboutIcons: AboutPillarIcon[] = ['sparkles', 'map', 'globe', 'shield']
-  const healAbout = (): AboutSection => {
-    const source = b.about?.pillars?.length ? b.about : d.about
-    const pillars = source.pillars.map((p, i) => {
-      const fb = d.about.pillars[i] ?? d.about.pillars[0]
-      const icon = aboutIcons.includes(p.icon as AboutPillarIcon)
-        ? (p.icon as AboutPillarIcon)
-        : fb.icon
-      return {
-        ...fb,
-        ...p,
-        id: p.id || fb.id,
-        title: (p.title ?? fb.title).trim() || fb.title,
-        body: p.body ?? fb.body,
-        icon,
-      }
-    })
-    return {
-      eyebrow: b.about?.eyebrow?.trim() || d.about.eyebrow,
-      title: b.about?.title?.trim() || d.about.title,
-      pillars: pillars.length ? pillars : [...d.about.pillars],
-    }
-  }
-
-  return {
-    ...b,
-    heroTextColor,
-    heroSlides: slides,
-    kolhapur: healKolhapur(),
-    about: healAbout(),
-    contact,
-    categoryImages: Object.fromEntries(
-      cats.map((cat) => [
-        cat.id,
-        heal(b.categoryImages?.[cat.id] ?? '', d.categoryImages[cat.id] ?? cat.heroImage),
-      ]),
-    ),
-  }
-}
-
-function loadBranding(cats: CategoryMeta[]): SiteBranding {
-  try {
-    const raw = localStorage.getItem(STORAGE_BRANDING)
-    if (raw) {
-      return healBranding(JSON.parse(raw) as StoredBranding, cats)
-    }
-  } catch {
-    /* ignore */
-  }
-  return healBranding(DEFAULT_BRANDING, cats)
-}
-
 interface StoreContextValue {
   products: Product[]
   categories: CategoryMeta[]
   enquiries: Enquiry[]
   branding: SiteBranding
+  storeReady: boolean
+  usesCloudStore: boolean
   addCategory: (input: { label: string; tagline: string; pageBannerImage?: string }) => void
   updateCategory: (id: string, patch: Partial<Pick<CategoryMeta, 'label' | 'tagline'>>) => void
   removeCategory: (id: string) => boolean
@@ -270,6 +107,7 @@ interface StoreContextValue {
   submitEnquiry: (e: Omit<Enquiry, 'id' | 'createdAt'>) => Promise<void>
   setBranding: (patch: Partial<SiteBranding>) => void
   resetBranding: () => void
+  migrateLocalToCloudIfEmpty: () => Promise<void>
   storageError: string | null
   clearStorageError: () => void
 }
@@ -277,57 +115,97 @@ interface StoreContextValue {
 const StoreContext = createContext<StoreContextValue | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [categories, setCategories] = useState<CategoryMeta[]>(loadCategories)
-  const [products, setProducts] = useState<Product[]>(loadProducts)
-  const [enquiries, setEnquiries] = useState<Enquiry[]>(loadEnquiries)
+  const usesCloudStore = isSupabaseConfigured()
+  const initialCats = defaultCategories()
+
+  const [storeReady, setStoreReady] = useState(!usesCloudStore)
+  const [categories, setCategories] = useState<CategoryMeta[]>(() =>
+    usesCloudStore ? initialCats : loadCategoriesLocal(),
+  )
+  const [products, setProducts] = useState<Product[]>(() =>
+    usesCloudStore ? defaultProducts() : loadProductsLocal(),
+  )
+  const [enquiries, setEnquiries] = useState<Enquiry[]>(() =>
+    usesCloudStore ? [] : loadEnquiriesLocal(),
+  )
   const [branding, setBrandingState] = useState<SiteBranding>(() =>
-    loadBranding(loadCategories()),
+    usesCloudStore ? defaultBranding(initialCats) : loadBrandingLocal(loadCategoriesLocal()),
   )
   const [storageError, setStorageError] = useState<string | null>(null)
 
   const clearStorageError = useCallback(() => setStorageError(null), [])
 
-  const persistProducts = useCallback((next: Product[]) => {
-    try {
-      setLocalStorage(STORAGE_PRODUCTS, JSON.stringify(next))
-      setProducts(next)
-      setStorageError(null)
-    } catch (e) {
-      if (e instanceof StorageQuotaError) {
-        setStorageError(e.message)
-        return
-      }
-      throw e
-    }
+  const applySnapshot = useCallback((snapshot: SiteContentSnapshot) => {
+    setProducts(snapshot.products)
+    setCategories(snapshot.categories)
+    setBrandingState(snapshot.branding)
   }, [])
 
-  const persistBranding = useCallback((next: SiteBranding) => {
-    try {
-      setLocalStorage(STORAGE_BRANDING, JSON.stringify(next))
-      setBrandingState(next)
-      setStorageError(null)
-    } catch (e) {
-      if (e instanceof StorageQuotaError) {
-        setStorageError(e.message)
-        return
-      }
-      throw e
-    }
-  }, [])
+  useEffect(() => {
+    if (!usesCloudStore) return
+    void loadSiteFromCloud()
+      .then((data) => {
+        if (data) applySnapshot(data)
+        clearLegacyLocalStorage()
+      })
+      .finally(() => setStoreReady(true))
+  }, [usesCloudStore, applySnapshot])
 
-  const persistCategories = useCallback((next: CategoryMeta[]) => {
-    try {
-      setLocalStorage(STORAGE_CATEGORIES, JSON.stringify(next))
-      setCategories(next)
-      setStorageError(null)
-    } catch (e) {
-      if (e instanceof StorageQuotaError) {
-        setStorageError(e.message)
+  useSiteContentRealtime(usesCloudStore && storeReady, applySnapshot)
+
+  const persistSnapshot = useCallback(
+    async (snapshot: SiteContentSnapshot) => {
+      if (usesCloudStore) {
+        try {
+          await saveSiteContent(snapshot)
+          applySnapshot(snapshot)
+          setStorageError(null)
+        } catch (e) {
+          setStorageError(e instanceof Error ? e.message : 'Could not save to cloud.')
+        }
         return
       }
-      throw e
+
+      try {
+        setLocalStorage(STORAGE_PRODUCTS, JSON.stringify(snapshot.products))
+        setLocalStorage(STORAGE_CATEGORIES, JSON.stringify(snapshot.categories))
+        setLocalStorage(STORAGE_BRANDING, JSON.stringify(snapshot.branding))
+        applySnapshot(snapshot)
+        setStorageError(null)
+      } catch (e) {
+        if (e instanceof StorageQuotaError) {
+          setStorageError(e.message)
+          return
+        }
+        throw e
+      }
+    },
+    [usesCloudStore, applySnapshot],
+  )
+
+  const migrateLocalToCloudIfEmpty = useCallback(async () => {
+    if (!usesCloudStore) return
+    try {
+      const row = await fetchSiteContentRaw()
+      if (!isCloudContentEmpty(row)) return
+      const legacy = readLegacyLocalSnapshot()
+      const snapshot: SiteContentSnapshot = {
+        products:
+          legacy?.products?.length ? legacy.products.map((p) => ({ ...p })) : products,
+        categories:
+          legacy?.categories?.length ? legacy.categories : categories,
+        branding: legacy?.branding
+          ? healBranding(legacy.branding, legacy.categories?.length ? legacy.categories : categories)
+          : branding,
+      }
+      await saveSiteContent(snapshot)
+      applySnapshot(snapshot)
+      clearLegacyLocalStorage()
+      setStorageError(null)
+    } catch (e) {
+      setStorageError(e instanceof Error ? e.message : 'Could not migrate local data.')
     }
-  }, [])
+  }, [usesCloudStore, products, categories, branding, applySnapshot])
 
   const addCategory = useCallback(
     (input: { label: string; tagline: string; pageBannerImage?: string }) => {
@@ -342,23 +220,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         tagline: input.tagline.trim(),
         heroImage,
       }
-      const next = [...categories, cat]
-      persistCategories(next)
-      persistBranding({
+      const nextCategories = [...categories, cat]
+      const nextBranding = {
         ...branding,
         categoryImages: { ...branding.categoryImages, [id]: pageBanner },
+      }
+      void persistSnapshot({
+        products,
+        categories: nextCategories,
+        branding: nextBranding,
       })
     },
-    [branding, categories, persistBranding, persistCategories],
+    [branding, categories, products, persistSnapshot],
   )
 
   const updateCategory = useCallback(
     (id: string, patch: Partial<Pick<CategoryMeta, 'label' | 'tagline'>>) => {
-      persistCategories(
-        categories.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-      )
+      void persistSnapshot({
+        products,
+        categories: categories.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+        branding,
+      })
     },
-    [categories, persistCategories],
+    [products, categories, branding, persistSnapshot],
   )
 
   const removeCategory = useCallback(
@@ -366,63 +250,78 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (categories.length <= 1) return false
       const inUse = products.some((p) => p.category === id)
       if (inUse) return false
-      const next = categories.filter((c) => c.id !== id)
+      const nextCategories = categories.filter((c) => c.id !== id)
       const { [id]: _removed, ...restImages } = branding.categoryImages
-      persistCategories(next)
-      persistBranding({ ...branding, categoryImages: restImages })
+      void persistSnapshot({
+        products,
+        categories: nextCategories,
+        branding: { ...branding, categoryImages: restImages },
+      })
       return true
     },
-    [branding, categories, persistCategories, persistBranding, products],
+    [branding, categories, products, persistSnapshot],
   )
 
   const resetCategories = useCallback(() => {
-    const next = DEFAULT_CATEGORIES.map((c) => ({ ...c }))
-    persistCategories(next)
-    persistBranding({
-      ...branding,
-      categoryImages: { ...DEFAULT_BRANDING.categoryImages },
+    const nextCategories = defaultCategories()
+    void persistSnapshot({
+      products,
+      categories: nextCategories,
+      branding: {
+        ...branding,
+        categoryImages: { ...defaultBranding(nextCategories).categoryImages },
+      },
     })
-  }, [branding, persistBranding, persistCategories])
+  }, [products, branding, persistSnapshot])
 
   const addProduct = useCallback(
     (p: Omit<Product, 'id'>) => {
       const id = `${p.category}-${Date.now()}`
-      persistProducts([...products, { ...p, id }])
+      void persistSnapshot({
+        products: [...products, { ...p, id }],
+        categories,
+        branding,
+      })
     },
-    [products, persistProducts],
+    [products, categories, branding, persistSnapshot],
   )
 
   const updateProduct = useCallback(
     (id: string, patch: Partial<Product>) => {
-      persistProducts(
-        products.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-      )
+      void persistSnapshot({
+        products: products.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+        categories,
+        branding,
+      })
     },
-    [products, persistProducts],
+    [products, categories, branding, persistSnapshot],
   )
 
   const saveProduct = useCallback(
     (product: Product) => {
       const exists = products.some((p) => p.id === product.id)
-      if (exists) {
-        persistProducts(products.map((p) => (p.id === product.id ? product : p)))
-      } else {
-        persistProducts([...products, product])
-      }
+      const nextProducts = exists
+        ? products.map((p) => (p.id === product.id ? product : p))
+        : [...products, product]
+      void persistSnapshot({ products: nextProducts, categories, branding })
     },
-    [products, persistProducts],
+    [products, categories, branding, persistSnapshot],
   )
 
   const deleteProduct = useCallback(
     (id: string) => {
-      persistProducts(products.filter((item) => item.id !== id))
+      void persistSnapshot({
+        products: products.filter((item) => item.id !== id),
+        categories,
+        branding,
+      })
     },
-    [products, persistProducts],
+    [products, categories, branding, persistSnapshot],
   )
 
   const submitEnquiry = useCallback(
     async (e: Omit<Enquiry, 'id' | 'createdAt'>) => {
-      if (isSupabaseConfigured()) {
+      if (usesCloudStore) {
         await insertCloudEnquiry(e)
         return
       }
@@ -435,19 +334,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setEnquiries(next)
       localStorage.setItem(STORAGE_ENQUIRIES, JSON.stringify(next))
     },
-    [enquiries],
+    [usesCloudStore, enquiries],
   )
 
   const setBranding = useCallback(
     (patch: Partial<SiteBranding>) => {
-      persistBranding({ ...branding, ...patch })
+      void persistSnapshot({
+        products,
+        categories,
+        branding: { ...branding, ...patch },
+      })
     },
-    [branding, persistBranding],
+    [products, categories, branding, persistSnapshot],
   )
 
   const resetBranding = useCallback(() => {
-    persistBranding(healBranding(DEFAULT_BRANDING, categories))
-  }, [categories, persistBranding])
+    void persistSnapshot({
+      products,
+      categories,
+      branding: defaultBranding(categories),
+    })
+  }, [products, categories, persistSnapshot])
 
   const value = useMemo(
     () => ({
@@ -455,6 +362,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       categories,
       enquiries,
       branding,
+      storeReady,
+      usesCloudStore,
       addCategory,
       updateCategory,
       removeCategory,
@@ -466,6 +375,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       submitEnquiry,
       setBranding,
       resetBranding,
+      migrateLocalToCloudIfEmpty,
       storageError,
       clearStorageError,
     }),
@@ -474,6 +384,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       categories,
       enquiries,
       branding,
+      storeReady,
+      usesCloudStore,
       addCategory,
       updateCategory,
       removeCategory,
@@ -485,10 +397,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       submitEnquiry,
       setBranding,
       resetBranding,
+      migrateLocalToCloudIfEmpty,
       storageError,
       clearStorageError,
     ],
   )
+
+  if (!storeReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white text-sm text-neutral-600">
+        Loading site…
+      </div>
+    )
+  }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }

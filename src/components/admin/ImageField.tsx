@@ -1,5 +1,7 @@
 import { ImagePlus, Link2 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useStore } from '../../context/StoreContext'
+import { normalizeImageUrlInput } from '../../utils/imageUrl'
 import { readImageFile } from '../../utils/imageUpload'
 import { SafeImage } from '../SafeImage'
 
@@ -18,9 +20,16 @@ export function ImageField({
   hint,
   previewClassName = 'h-32 w-full',
 }: ImageFieldProps) {
+  const { usesCloudStore } = useStore()
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<'upload' | 'url'>('upload')
+  const [mode, setMode] = useState<'upload' | 'url'>(() =>
+    usesCloudStore || value.startsWith('http') ? 'url' : 'upload',
+  )
+
+  useEffect(() => {
+    if (usesCloudStore) setMode('url')
+  }, [usesCloudStore])
 
   const onFile = async (file: File | undefined) => {
     if (!file) return
@@ -33,20 +42,26 @@ export function ImageField({
     }
   }
 
+  const applyUrl = (raw: string) => {
+    onChange(normalizeImageUrlInput(raw))
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-neutral-700">{label}</span>
         <div className="flex gap-1 text-xs">
-          <button
-            type="button"
-            onClick={() => setMode('upload')}
-            className={`rounded-md px-2 py-1 font-medium ${
-              mode === 'upload' ? 'text-neutral-900 underline' : 'text-neutral-500 hover:text-neutral-900'
-            }`}
-          >
-            Upload
-          </button>
+          {!usesCloudStore && (
+            <button
+              type="button"
+              onClick={() => setMode('upload')}
+              className={`rounded-md px-2 py-1 font-medium ${
+                mode === 'upload' ? 'text-neutral-900 underline' : 'text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              Upload
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setMode('url')}
@@ -63,7 +78,7 @@ export function ImageField({
         <SafeImage src={value} alt="" className={`${previewClassName} object-cover`} />
       </div>
 
-      {mode === 'upload' ? (
+      {mode === 'upload' && !usesCloudStore ? (
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -78,8 +93,9 @@ export function ImageField({
           <input
             type="url"
             value={value.startsWith('data:') ? '' : value}
-            placeholder="https://…"
-            onChange={(e) => onChange(e.target.value)}
+            placeholder="https://your-cdn.com/image.jpg"
+            onChange={(e) => applyUrl(e.target.value)}
+            onBlur={(e) => applyUrl(e.target.value)}
             className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400"
           />
         </div>
@@ -94,9 +110,15 @@ export function ImageField({
       />
       {hint && <p className="text-xs text-neutral-500">{hint}</p>}
       <p className="text-xs text-neutral-500">
-        PNG/WebP keep transparency; JPG does not (black or white fills “empty” areas). Uploads are
-        compressed for browser storage (~5MB total). For large files, use a URL instead.
+        {usesCloudStore
+          ? 'Paste a public image link (https://… from Supabase Storage, Cloudflare, or any host). The same URL is saved for every visitor.'
+          : 'PNG/WebP keep transparency. For the live site, use a public URL or enable Supabase in .env.'}
       </p>
+      {usesCloudStore && value.startsWith('data:') && (
+        <p className="text-xs text-amber-800" role="status">
+          This image is embedded in the database. Prefer a public https URL so loads stay fast on mobile.
+        </p>
+      )}
       {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   )

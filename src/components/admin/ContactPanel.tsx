@@ -15,7 +15,7 @@ export function ContactPanel() {
   return (
     <div className="max-w-2xl space-y-8">
       <p className="text-sm text-neutral-600">
-        Shown in the site footer. Saved in this browser with your other branding settings.
+        Shown in the site footer. Saved with your other site content in Supabase.
       </p>
 
       <div className="space-y-4 border-t border-neutral-100 pt-8">
